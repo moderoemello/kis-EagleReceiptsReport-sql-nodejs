@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Date Range Input</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        label {
+            font-weight: bold;
+        }
+        input[type="date"] {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+        }
+        button {
+            background-color: #0056b3;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #004494;
+        }
+        #processing {
+            text-align: center;
+            margin-top: 15px;
+            display: none;
+            color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Input Date Range</h1>
+        <form id="dateForm">
+            <label for="start-date">Start Date:</label>
+            <input type="date" id="start-date" name="start_date" required>
+    
+            <label for="end-date">End Date:</label>
+            <input type="date" id="end-date" name="end_date" required>
+    
+            <button type="submit">Submit</button>
+        </form>
+        <div id="processing">Processing...</div>
+    </div>    
+    <script>
+        let ws; // Reference for WebSocket connection
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:3000');
+        
+            ws.onopen = function() {
+                console.log('WebSocket connection established');
+            };
+        
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+    
+            ws.onclose = function() {
+                console.log('WebSocket connection closed. Attempting to reconnect...');
+                setTimeout(connectWebSocket, 5000); // Attempt to reconnect in 5 seconds
+            };
+        
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                
+                if (message.type === 'csv') {
+                    const csvData = atob(message.data); // Decode base64
+                    const blob = new Blob([csvData], { type: 'text/csv' });
+                    const downloadUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = 'products.csv';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(downloadUrl);
+                    document.getElementById('processing').style.display = 'none';
+                } else if (message.type === 'error') {
+                    console.error('Error:', message.message);
+                    document.getElementById('processing').style.display = 'none';
+                    alert('Failed to process request: ' + message.message);
+                } else if (message.type === 'ack') {
+                    // Handle the acknowledgment message
+                    console.log('Request acknowledged, processing started.');
+                    document.getElementById('processing').textContent = 'Your request is being processed, please wait...';
+                    document.getElementById('processing').style.display = 'block';
+                }
+            };
+        }
+        
+        document.getElementById('dateForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            
+            if (new Date(startDate) > new Date(endDate)) {
+                alert('Start date must be before end date.');
+                return;
+            }
+    
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ start_date: startDate, end_date: endDate }));
+                document.getElementById('processing').textContent = 'Sending request...';
+                document.getElementById('processing').style.display = 'block';
+            } else {
+                alert('Waiting for WebSocket connection. Please try again shortly.');
+            }
+        });
+    
+        connectWebSocket(); // Initialize WebSocket connection
+    </script>
+    
+</body>
+</html>
